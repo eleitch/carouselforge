@@ -548,24 +548,33 @@ export default function CarouselForge() {
     const maxImgH = h * 0.3;
     const leftPad = (!hasBgImg && (t.decorStyle === "ruled-paper")) ? pad + 20 * scale : (!hasBgImg && t.decorStyle === "magazine-bar") ? pad + 10 * scale : pad;
 
+    const tbActiveExport = globalStyle.textBoxEnabled || (t.decorStyle === "text-box" && !hasBgImg);
+    const hWrapPad = tbActiveExport ? 32 * scale : 0;
+    const bWrapPad = tbActiveExport ? 28 * scale : 0;
+
     ctx.font = headingBaseFontStr;
     const headingClean = stripMarkers(heading);
-    const headingLines = heading ? wrapText(ctx, headingClean, w - leftPad - pad) : [];
-    const headingRichLines = heading ? wrapTextRich(ctx, heading, w - leftPad - pad, headingBaseFontStr, headingBoldFontStr) : [];
+    const headingLines = heading ? wrapText(ctx, headingClean, w - leftPad - pad - hWrapPad) : [];
+    const headingRichLines = heading ? wrapTextRich(ctx, heading, w - leftPad - pad - hWrapPad, headingBaseFontStr, headingBoldFontStr) : [];
 
     ctx.font = baseFontStr;
     const bodyRichLines = [];
     const bodyPlainLines = [];
     if (body) {
       body.split("\n").forEach(p => {
-        const wr = wrapTextRich(ctx, p, w - leftPad - pad, baseFontStr, boldFontStr);
+        const wr = wrapTextRich(ctx, p, w - leftPad - pad - bWrapPad, baseFontStr, boldFontStr);
         if (!wr.length) { bodyRichLines.push([]); bodyPlainLines.push(""); }
         else wr.forEach(l => { bodyRichLines.push(l); bodyPlainLines.push(l.map(s => s.text).join("")); });
       });
     }
 
-    const headingH = headingRichLines.length * hs * 1.2;
-    const bodyH = bodyRichLines.length * bfs * lineHeight;
+    const tbOnExport = globalStyle.textBoxEnabled || (t.decorStyle === "text-box" && !hasBgImg);
+    const headingH = tbOnExport
+      ? (headingRichLines.length ? headingRichLines.length * hs * 1.3 + 24 * scale : 0)
+      : headingRichLines.length * hs * 1.2;
+    const bodyH = tbOnExport
+      ? (bodyRichLines.length ? bodyRichLines.length * bfs * lineHeight + 20 * scale : 0)
+      : bodyRichLines.length * bfs * lineHeight;
     const imgH = sImg ? Math.min(maxImgH, (sImg.height / sImg.width) * (w - leftPad - pad)) : 0;
     const gap = 12 * scale;
     const totalH = headingH + (bodyH ? gap + bodyH : 0) + (imgH ? gap + imgH : 0);
@@ -620,12 +629,29 @@ export default function CarouselForge() {
     const tbHColor = getHColor(origIdx) || "#1a1a1a";
     const tbBColor = getBColor(origIdx) || "#333333";
 
+    // Measure tight-fit text box widths
+    const measureLineWidth = (lineSegs, baseFontStr, boldFontStr) => {
+      let w = 0;
+      for (const seg of lineSegs) { ctx.font = seg.bold ? boldFontStr : baseFontStr; w += ctx.measureText(seg.text).width; }
+      return w;
+    };
+    const tbHPadX = 16 * scale; const tbHPadY = 12 * scale;
+    const tbBPadX = 14 * scale; const tbBPadY = 10 * scale;
+    const tbRadius = 4 * scale;
+
     const drawHeading = () => {
       if (!headingRichLines.length) return;
       if (tbOn) {
-        const bh = headingRichLines.length * hs * 1.2 + 24 * scale;
-        ctx.fillStyle = hexToRgba(tbColor, tbOpacity); ctx.beginPath(); ctx.roundRect(leftPad, y - 12 * scale, w - leftPad - pad, bh, 4 * scale); ctx.fill();
-        headingRichLines.forEach(lineSegs => { y += hs; drawRichLine(ctx, lineSegs, leftPad, y, headingBaseFontStr, headingBoldFontStr, tbHColor, hlColor, scale); });
+        // Measure tight-fit box width
+        let maxLineW = 0;
+        for (const lineSegs of headingRichLines) { maxLineW = Math.max(maxLineW, measureLineWidth(lineSegs, headingBaseFontStr, headingBoldFontStr)); }
+        const boxW = maxLineW + tbHPadX * 2;
+        const boxH = headingRichLines.length * hs * 1.3 + tbHPadY * 2;
+        ctx.fillStyle = hexToRgba(tbColor, tbOpacity);
+        ctx.beginPath(); ctx.roundRect(leftPad, y, boxW, boxH, tbRadius); ctx.fill();
+        let ty = y + tbHPadY;
+        headingRichLines.forEach(lineSegs => { ty += hs; drawRichLine(ctx, lineSegs, leftPad + tbHPadX, ty, headingBaseFontStr, headingBoldFontStr, tbHColor, hlColor, scale); ty += hs * 0.3; });
+        y += boxH;
       } else {
         headingRichLines.forEach(lineSegs => { y += hs; drawRichLine(ctx, lineSegs, leftPad, y, headingBaseFontStr, headingBoldFontStr, hColor, hlColor, scale); });
       }
@@ -634,10 +660,16 @@ export default function CarouselForge() {
     const drawBody = () => {
       if (!bodyRichLines.length) return;
       if (tbOn) {
-        const bh = bodyRichLines.length * bfs * lineHeight + 20 * scale;
-        ctx.fillStyle = hexToRgba(tbColor, tbBodyOpacity); ctx.beginPath(); ctx.roundRect(leftPad, y - 10 * scale, w - leftPad - pad, bh, 4 * scale); ctx.fill();
-        ctx.globalAlpha = 0.88;
-        bodyRichLines.forEach(lineSegs => { y += bfs * lineHeight; drawRichLine(ctx, lineSegs, leftPad, y, baseFontStr, boldFontStr, tbBColor, hlColor, scale); });
+        // Measure tight-fit box width
+        let maxLineW = 0;
+        for (const lineSegs of bodyRichLines) { maxLineW = Math.max(maxLineW, measureLineWidth(lineSegs, baseFontStr, boldFontStr)); }
+        const boxW = maxLineW + tbBPadX * 2;
+        const boxH = bodyRichLines.length * bfs * lineHeight + tbBPadY * 2;
+        ctx.fillStyle = hexToRgba(tbColor, tbBodyOpacity);
+        ctx.beginPath(); ctx.roundRect(leftPad, y, boxW, boxH, tbRadius); ctx.fill();
+        let ty = y + tbBPadY;
+        bodyRichLines.forEach(lineSegs => { ty += bfs * lineHeight; drawRichLine(ctx, lineSegs, leftPad + tbBPadX, ty, baseFontStr, boldFontStr, tbBColor, hlColor, scale); });
+        y += boxH;
       } else {
         ctx.globalAlpha = 0.88;
         bodyRichLines.forEach(lineSegs => { y += bfs * lineHeight; drawRichLine(ctx, lineSegs, leftPad, y, baseFontStr, boldFontStr, bColor, hlColor, scale); });
