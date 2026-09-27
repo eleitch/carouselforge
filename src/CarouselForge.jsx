@@ -408,6 +408,12 @@ export default function CarouselForge() {
   useEffect(() => { lsSet("cf_brand_kits", brandKits); }, [brandKits]);
   useEffect(() => { lsSet("cf_active_brand_kit", activeBrandKit); }, [activeBrandKit]);
 
+  useEffect(() => {
+    const handler = (e) => { if (rawContent.trim()) { e.preventDefault(); e.returnValue = ""; } };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [rawContent]);
+
   const parsedSlides = useMemo(() => parseSlides(rawContent), [rawContent]);
   const orderedIndices = useMemo(() => slideOrder || parsedSlides.map((_, i) => i), [slideOrder, parsedSlides]);
   const slides = useMemo(() => orderedIndices.map(i => ({ text: slideOverrides[i]?.text ?? (parsedSlides[i] || ""), fontSize: slideOverrides[i]?.fontSize ?? null, headingFontSize: slideOverrides[i]?.headingFontSize ?? null, origIdx: i })), [parsedSlides, slideOverrides, orderedIndices]);
