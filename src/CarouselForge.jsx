@@ -189,7 +189,7 @@ function Decoration({ style, accent, bg, fg, size = 320 }) {
 
 /* ═══ SLIDE CARD ═══ */
 const CROP_POS_MAP = { center: "center", top: "top", bottom: "bottom", left: "left", right: "right" };
-function SlideCard({ text, template, fontSize, headingFontSize, slideNum, total, size = 320, ratio = "1:1", bgImage, bgColor, overlayColor, overlayOpacity, slideImage, imagePos, imageCrop, imageMode, headingColor, bodyColor, watermark, globalStyle }) {
+function SlideCard({ text, template, fontSize, headingFontSize, slideNum, total, size = 320, ratio = "1:1", bgImage, bgColor, overlayColor, overlayOpacity, slideImage, imagePos, imageCrop, imageMode, headingColor, bodyColor, watermarks, globalStyle }) {
   const ratioObj = RATIOS[ratio] || RATIOS["1:1"];
   const cardW = size;
   const cardH = Math.round(size * (ratioObj.h / ratioObj.w));
@@ -256,22 +256,20 @@ function SlideCard({ text, template, fontSize, headingFontSize, slideNum, total,
   };
 
   const renderWatermark = () => {
-    if (!watermark?.enabled || (!watermark.logo && !watermark.username)) return null;
-    const p = watermark.position || "bottom-right";
-    const wmFontSize = watermark.fontSize || 9;
-    const wmLogoSize = wmFontSize * 2;
-    let ps;
-    if (p === "center-top") {
-      ps = { top: 8, left: "50%", transform: "translateX(-50%)" };
-    } else if (p === "center-bottom") {
-      ps = { bottom: 8, left: "50%", transform: "translateX(-50%)" };
-    } else {
-      ps = { "top-left": { top: 8, left: 10 }, "top-right": { top: 8, right: 10 }, "bottom-left": { bottom: 8, left: 10 }, "bottom-right": { bottom: 8, right: 10 } }[p];
-    }
-    return <div style={{ position: "absolute", ...ps, zIndex: 5, display: "flex", alignItems: "center", gap: 5, opacity: watermark.opacity ?? 0.5 }}>
-      {watermark.logo && <img src={watermark.logo} alt="" style={{ width: wmLogoSize, height: wmLogoSize, borderRadius: 4, objectFit: "cover" }} />}
-      {watermark.username && <span style={{ fontSize: wmFontSize, fontFamily: template.bodyFont, color: template.fg, fontWeight: 600 }}>{watermark.username}</span>}
-    </div>;
+    if (!watermarks || !watermarks.length) return null;
+    return watermarks.filter(wm => wm.enabled && (wm.logo || wm.text)).map((wm, wi) => {
+      const p = wm.position || "bottom-right";
+      const wmFontSize = wm.fontSize || 9;
+      const wmLogoSize = wmFontSize * 2;
+      let ps;
+      if (p === "center-top") { ps = { top: 8, left: "50%", transform: "translateX(-50%)" }; }
+      else if (p === "center-bottom") { ps = { bottom: 8, left: "50%", transform: "translateX(-50%)" }; }
+      else { ps = { "top-left": { top: 8, left: 10 }, "top-right": { top: 8, right: 10 }, "bottom-left": { bottom: 8, left: 10 }, "bottom-right": { bottom: 8, right: 10 } }[p]; }
+      return <div key={wi} style={{ position: "absolute", ...ps, zIndex: 5, display: "flex", alignItems: "center", gap: 5, opacity: wm.opacity ?? 0.5 }}>
+        {wm.logo && <img src={wm.logo} alt="" style={{ width: wmLogoSize, height: wmLogoSize, borderRadius: 4, objectFit: "cover" }} />}
+        {wm.text && <span style={{ fontSize: wmFontSize, fontFamily: template.bodyFont, color: template.fg, fontWeight: 600 }}>{wm.text}</span>}
+      </div>;
+    });
   };
 
   return (
@@ -360,7 +358,9 @@ export default function CarouselForge() {
   const [slideBodyColors, setSlideBodyColors] = useState({});
   const [slideImages, setSlideImages] = useState({});
   const [slideImagePos, setSlideImagePos] = useState({});
-  const [watermark, setWatermark] = useState({ enabled: false, logo: null, username: "", position: "bottom-right", opacity: 0.5, fontSize: 9 });
+  const defaultWm = () => ({ enabled: true, logo: null, text: "", position: "bottom-right", opacity: 0.5, fontSize: 9 });
+  const [watermarks, setWatermarks] = useState([{ enabled: true, logo: null, text: "", position: "bottom-right", opacity: 0.5, fontSize: 9 }]);
+  const updateWm = (idx, patch) => setWatermarks(prev => prev.map((wm, i) => i === idx ? { ...wm, ...patch } : wm));
   const [slideOrder, setSlideOrder] = useState(null);
   const [showStyleSheet, setShowStyleSheet] = useState(false);
   const [showWmSheet, setShowWmSheet] = useState(false);
@@ -687,12 +687,13 @@ export default function CarouselForge() {
     else if (iPos === "middle") { drawHeading(); drawImg(); drawBody(); }
     else { drawHeading(); drawBody(); drawImg(); }
 
-    // Watermark
-    if (watermark?.enabled && (watermark.logo || watermark.username)) {
-      ctx.globalAlpha = watermark.opacity ?? 0.5;
-      const wmLogo = await loadImg(watermark.logo);
-      const pos = watermark.position || "bottom-right";
-      const wmFontSize = (watermark.fontSize || 9) * scale;
+    // Watermarks
+    for (const wm of (watermarks || [])) {
+      if (!wm.enabled || (!wm.logo && !wm.text)) continue;
+      ctx.globalAlpha = wm.opacity ?? 0.5;
+      const wmLogo = await loadImg(wm.logo);
+      const pos = wm.position || "bottom-right";
+      const wmFontSize = (wm.fontSize || 9) * scale;
       const wmS = wmFontSize * 2;
       const wmPX = 20 * scale; const wmPY = 16 * scale;
 
@@ -701,13 +702,13 @@ export default function CarouselForge() {
         let wmY = pos === "center-top" ? wmPY + wmS : h - wmPY;
         ctx.textAlign = "center";
         if (wmLogo) {
-          const lx = wmX - wmS / 2 - (watermark.username ? ctx.measureText(watermark.username).width / 2 + 4 * scale : 0);
+          const lx = wmX - wmS / 2 - (wm.text ? ctx.measureText(wm.text).width / 2 + 4 * scale : 0);
           const ly = pos === "center-top" ? wmPY : h - wmPY - wmS;
           ctx.drawImage(wmLogo, lx, ly, wmS, wmS);
-          if (watermark.username) { ctx.fillStyle = t.fg; ctx.font = `600 ${wmFontSize}px ${bFont}, sans-serif`; ctx.fillText(watermark.username, wmX + wmS / 2, ly + wmS / 2 + wmFontSize / 3); }
-        } else if (watermark.username) {
+          if (wm.text) { ctx.fillStyle = t.fg; ctx.font = `600 ${wmFontSize}px ${bFont}, sans-serif`; ctx.fillText(wm.text, wmX + wmS / 2, ly + wmS / 2 + wmFontSize / 3); }
+        } else if (wm.text) {
           ctx.fillStyle = t.fg; ctx.font = `600 ${wmFontSize}px ${bFont}, sans-serif`;
-          ctx.fillText(watermark.username, wmX, wmY);
+          ctx.fillText(wm.text, wmX, wmY);
         }
         ctx.textAlign = "left";
       } else {
@@ -717,8 +718,8 @@ export default function CarouselForge() {
           const lx = pos.includes("right") ? wmX - wmS : wmX;
           const ly = pos.includes("bottom") ? wmY - wmS : wmY - wmS;
           ctx.drawImage(wmLogo, lx, ly, wmS, wmS);
-          if (watermark.username) { ctx.fillStyle = t.fg; ctx.font = `600 ${wmFontSize}px ${bFont}, sans-serif`; const tx = pos.includes("right") ? lx - 8 * scale : wmX + wmS + 8 * scale; ctx.textAlign = pos.includes("right") ? "right" : "left"; ctx.fillText(watermark.username, tx, ly + wmS / 2 + wmFontSize / 3); ctx.textAlign = "left"; }
-        } else if (watermark.username) { ctx.fillStyle = t.fg; ctx.font = `600 ${wmFontSize}px ${bFont}, sans-serif`; ctx.textAlign = pos.includes("right") ? "right" : "left"; ctx.fillText(watermark.username, wmX, wmY - wmS / 2 + wmFontSize / 3); ctx.textAlign = "left"; }
+          if (wm.text) { ctx.fillStyle = t.fg; ctx.font = `600 ${wmFontSize}px ${bFont}, sans-serif`; const tx = pos.includes("right") ? lx - 8 * scale : wmX + wmS + 8 * scale; ctx.textAlign = pos.includes("right") ? "right" : "left"; ctx.fillText(wm.text, tx, ly + wmS / 2 + wmFontSize / 3); ctx.textAlign = "left"; }
+        } else if (wm.text) { ctx.fillStyle = t.fg; ctx.font = `600 ${wmFontSize}px ${bFont}, sans-serif`; ctx.textAlign = pos.includes("right") ? "right" : "left"; ctx.fillText(wm.text, wmX, wmY - wmS / 2 + wmFontSize / 3); ctx.textAlign = "left"; }
       }
       ctx.globalAlpha = 1;
     }
@@ -796,7 +797,7 @@ export default function CarouselForge() {
       </div>
       <div onTouchStart={e => onTouch("s", e)} onTouchEnd={e => onTouch("e", e)} style={{ display: "flex", justifyContent: "center", width: "100%", maxWidth: 400 }}>
         <div style={{ animation: "slideIn 0.2s ease-out" }} key={previewIndex + previewRatio}>
-          <SlideCard text={cur.text} template={t} fontSize={cur.fontSize} headingFontSize={cur.headingFontSize} slideNum={previewIndex + 1} total={slides.length} size={slideSize} ratio={previewRatio} bgImage={getBg(oi)} bgColor={bgColor} overlayColor={overlayColor || t.accent} overlayOpacity={overlayOpacity} slideImage={slideImages[oi]} imagePos={slideImagePos[oi] || "bottom"} imageCrop={slideImageCrop[oi]} imageMode={slideImageMode[oi]} headingColor={getHColor(oi)} bodyColor={getBColor(oi)} watermark={watermark} globalStyle={globalStyle} />
+          <SlideCard text={cur.text} template={t} fontSize={cur.fontSize} headingFontSize={cur.headingFontSize} slideNum={previewIndex + 1} total={slides.length} size={slideSize} ratio={previewRatio} bgImage={getBg(oi)} bgColor={bgColor} overlayColor={overlayColor || t.accent} overlayOpacity={overlayOpacity} slideImage={slideImages[oi]} imagePos={slideImagePos[oi] || "bottom"} imageCrop={slideImageCrop[oi]} imageMode={slideImageMode[oi]} headingColor={getHColor(oi)} bodyColor={getBColor(oi)} watermarks={watermarks} globalStyle={globalStyle} />
         </div>
       </div>
       <div style={{ display: "flex", gap: 6, marginTop: 14 }}>{Object.keys(RATIOS).map(r => <button key={r} onClick={() => setPreviewRatio(r)} style={{ padding: "5px 14px", borderRadius: 16, border: previewRatio === r ? `2px solid ${t.accent}` : "1px solid #333", background: previewRatio === r ? t.accent + "20" : "#111125", color: previewRatio === r ? t.accent : "#888", fontSize: 12, fontWeight: previewRatio === r ? 700 : 400, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>{r}</button>)}</div>
@@ -961,28 +962,33 @@ export default function CarouselForge() {
   }
 
   function WmPanel() {
-    const lRef = useRef(null);
-    return <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <label style={{ ...LS, marginBottom: 0 }}>Enable</label>
-        <button onClick={() => setWatermark(p => ({ ...p, enabled: !p.enabled }))} style={{ width: 48, height: 28, borderRadius: 14, border: "none", background: watermark.enabled ? t.accent : "#333", cursor: "pointer", position: "relative" }}><div style={{ width: 22, height: 22, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: watermark.enabled ? 23 : 3, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} /></button>
-      </div>
-      {watermark.enabled && <>
-        <div><label style={LS}>Logo</label>{watermark.logo ? <div style={{ display: "flex", alignItems: "center", gap: 10 }}><img src={watermark.logo} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }} /><button onClick={() => setWatermark(p => ({ ...p, logo: null }))} style={{ background: "none", border: "none", color: "#888", cursor: "pointer" }}><Trash2 size={16} /></button></div> : <button onClick={() => lRef.current?.click()} style={{ padding: "8px 16px", background: "#16162e", border: "1px dashed #3a3a55", borderRadius: 8, color: "#9a9ab0", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}><Upload size={14} /> Upload</button>}<input ref={lRef} type="file" accept="image/*" hidden onChange={e => doUpload(e, url => setWatermark(p => ({ ...p, logo: url })))} /></div>
-        <div><label style={LS}>Username</label><input value={watermark.username} onChange={e => setWatermark(p => ({ ...p, username: e.target.value }))} placeholder="@you" style={inputStyle} /></div>
-        <div>
-          <label style={LS}>Position</label>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-            {[
-              ["top-left", "↖ TL"], ["center-top", "↑ CT"], ["top-right", "↗ TR"],
-              ["bottom-left", "↙ BL"], ["center-bottom", "↓ CB"], ["bottom-right", "↘ BR"]
-            ].map(([v, l]) => <button key={v} onClick={() => setWatermark(p => ({ ...p, position: v }))} style={pill(watermark.position === v, t.accent)}>{l}</button>)}
+    const logoRefs = useRef([]);
+    return <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {watermarks.map((wm, idx) => {
+        const setField = (patch) => updateWm(idx, patch);
+        return <div key={idx} style={{ background: "#111125", borderRadius: 12, padding: 14, border: "1px solid #252540", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ color: "#e8e6f0", fontSize: 14, fontWeight: 600 }}>Watermark {idx + 1}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <button onClick={() => setField({ enabled: !wm.enabled })} style={{ width: 42, height: 24, borderRadius: 12, border: "none", background: wm.enabled ? t.accent : "#333", cursor: "pointer", position: "relative" }}><div style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: wm.enabled ? 21 : 3, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} /></button>
+              {watermarks.length > 1 && <button onClick={() => setWatermarks(prev => prev.filter((_, i) => i !== idx))} style={{ background: "none", border: "none", color: "#888", cursor: "pointer", padding: 2 }}><Trash2 size={15} /></button>}
+            </div>
           </div>
-          <div style={{ color: "#777790", fontSize: 11, marginTop: 8 }}>Center positions stick close to content</div>
-        </div>
-        <ComboSlider label="Opacity" value={Math.round((watermark.opacity ?? 0.5) * 100)} min={10} max={100} step={1} unit="%" accent={t.accent} onChange={v => setWatermark(p => ({ ...p, opacity: v / 100 }))} />
-        <ComboSlider label="Font Size" value={watermark.fontSize || 9} min={6} max={24} step={1} unit="px" accent={t.accent} onChange={v => setWatermark(p => ({ ...p, fontSize: v }))} />
-      </>}
+          {wm.enabled && <>
+            <div><label style={LS}>Logo</label>{wm.logo ? <div style={{ display: "flex", alignItems: "center", gap: 10 }}><img src={wm.logo} alt="" style={{ width: 36, height: 36, borderRadius: 6, objectFit: "cover" }} /><button onClick={() => setField({ logo: null })} style={{ background: "none", border: "none", color: "#888", cursor: "pointer" }}><Trash2 size={14} /></button></div> : <button onClick={() => logoRefs.current[idx]?.click()} style={{ padding: "6px 14px", background: "#16162e", border: "1px dashed #3a3a55", borderRadius: 8, color: "#9a9ab0", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}><Upload size={13} /> Upload</button>}<input ref={el => logoRefs.current[idx] = el} type="file" accept="image/*" hidden onChange={e => doUpload(e, url => setField({ logo: url }))} /></div>
+            <div><label style={LS}>Text</label><input value={wm.text} onChange={e => setField({ text: e.target.value })} placeholder="@username / tagline" style={inputStyle} /></div>
+            <div>
+              <label style={LS}>Position</label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+                {[["top-left", "↖ TL"], ["center-top", "↑ CT"], ["top-right", "↗ TR"], ["bottom-left", "↙ BL"], ["center-bottom", "↓ CB"], ["bottom-right", "↘ BR"]].map(([v, l]) => <button key={v} onClick={() => setField({ position: v })} style={pill(wm.position === v, t.accent)}>{l}</button>)}
+              </div>
+            </div>
+            <ComboSlider label="Opacity" value={Math.round((wm.opacity ?? 0.5) * 100)} min={10} max={100} step={1} unit="%" accent={t.accent} onChange={v => setField({ opacity: v / 100 })} />
+            <ComboSlider label="Font Size" value={wm.fontSize || 9} min={6} max={24} step={1} unit="px" accent={t.accent} onChange={v => setField({ fontSize: v })} />
+          </>}
+        </div>;
+      })}
+      {watermarks.length < 3 && <button onClick={() => setWatermarks(prev => [...prev, defaultWm()])} style={{ padding: "10px 14px", background: "none", border: "1px dashed #3a3a55", borderRadius: 10, color: "#9a9ab0", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Plus size={15} /> Add Watermark ({watermarks.length}/3)</button>}
       <button onClick={() => setShowWmSheet(false)} style={{ padding: 14, background: t.accent, color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Done</button>
     </div>;
   }
